@@ -3,11 +3,10 @@ pandas
 python-dotenv
 matplotlib
 plotly
-
 schedule
 
-streamlit==1.19.0
-
-
-
+streamlit>=1.32.0
 altair==4.2.2
+
+
+
