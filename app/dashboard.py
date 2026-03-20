@@ -12,35 +12,55 @@ st.set_page_config(
 @st.cache_data
 def load_data():
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    file_path = os.path.join(base_dir, "data", "enriched_repos.csv")
+    file_path = os.path.join(base_dir, "data", "history", "repo_trend_history.csv")
+
+    if not os.path.exists(file_path):
+        st.error(f"数据文件不存在：{file_path}")
+        st.stop()
+
     df = pd.read_csv(file_path)
 
-    # 数值列
+    # 数值列处理
     numeric_cols = [
         "stargazers_count",
         "forks_count",
         "open_issues_count",
-        "contributors_count"
+        "contributors_count",
+        "hot_score"
     ]
     for col in numeric_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
-    # 时间列
-    time_cols = ["created_at", "updated_at", "pushed_at"]
+    # 时间列处理
+    time_cols = ["snapshot_date", "created_at", "updated_at", "pushed_at"]
     for col in time_cols:
-        df[col] = pd.to_datetime(df[col], errors="coerce")
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce")
 
     # 缺失值处理
-    df["language"] = df["language"].fillna("Unknown")
-    df["contributors_count"] = df["contributors_count"].fillna(0)
-    df["topics"] = df["topics"].fillna("")
+    if "language" in df.columns:
+        df["language"] = df["language"].fillna("Unknown")
+    else:
+        df["language"] = "Unknown"
 
-    # 热度评分
-    df["hot_score"] = (
-        df["stargazers_count"] * 0.6 +
-        df["forks_count"] * 0.3 +
-        df["contributors_count"] * 0.1
-    )
+    if "contributors_count" in df.columns:
+        df["contributors_count"] = df["contributors_count"].fillna(0)
+    else:
+        df["contributors_count"] = 0
+
+    if "topics" in df.columns:
+        df["topics"] = df["topics"].fillna("")
+    else:
+        df["topics"] = ""
+
+    # 如果历史表里没有 hot_score，就现场补算
+    if "hot_score" not in df.columns:
+        df["hot_score"] = (
+            df["stargazers_count"].fillna(0) * 0.6 +
+            df["forks_count"].fillna(0) * 0.3 +
+            df["contributors_count"].fillna(0) * 0.1
+        )
 
     return df
 
@@ -48,7 +68,7 @@ def load_data():
 def extract_all_topics(df):
     topic_set = set()
 
-    for topics in df["topics"]:
+    for topics in df["topics"].fillna(""):
         for topic in str(topics).split(","):
             topic = topic.strip()
             if topic:
@@ -59,8 +79,16 @@ def extract_all_topics(df):
 
 df = load_data()
 
+# 只展示最新一天的数据
+if "snapshot_date" in df.columns and not df["snapshot_date"].isna().all():
+    latest_date = df["snapshot_date"].max()
+    df = df[df["snapshot_date"] == latest_date].copy()
+
 st.title("GitHub 热门仓库趋势分析看板")
-st.markdown("基于 GitHub API 的热门仓库抓取、增强分析与交互式可视化展示")
+st.markdown("基于 GitHub API、GitHub Actions 与 Streamlit 的热门仓库自动化分析系统")
+
+if "snapshot_date" in df.columns and not df["snapshot_date"].isna().all():
+    st.caption(f"当前展示数据日期：{df['snapshot_date'].max().strftime('%Y-%m-%d')}")
 
 # -----------------------------
 # 侧边栏筛选
@@ -73,8 +101,9 @@ selected_language = st.sidebar.selectbox("选择主语言", language_list)
 topic_list = extract_all_topics(df)
 selected_topic = st.sidebar.selectbox("选择 Topic", topic_list)
 
-min_stars = int(df["stargazers_count"].min())
-max_stars = int(df["stargazers_count"].max())
+min_stars = int(df["stargazers_count"].min()) if not df.empty else 0
+max_stars = int(df["stargazers_count"].max()) if not df.empty else 0
+
 selected_stars = st.sidebar.slider(
     "Stars 范围",
     min_stars,
@@ -100,7 +129,6 @@ filtered_df = filtered_df[
     (filtered_df["stargazers_count"] <= selected_stars[1])
 ]
 
-# 避免筛选后为空时报错
 if filtered_df.empty:
     st.warning("当前筛选条件下没有数据，请调整筛选条件。")
     st.stop()
@@ -266,7 +294,11 @@ show_cols = [
     "updated_at"
 ]
 
-display_df = filtered_df[show_cols].sort_values("hot_score", ascending=False).copy()
-display_df["updated_at"] = display_df["updated_at"].dt.strftime("%Y-%m-%d %H:%M:%S")
+existing_cols = [col for col in show_cols if col in filtered_df.columns]
+display_df = filtered_df[existing_cols].sort_values("hot_score", ascending=False).copy()
+
+if "updated_at" in display_df.columns:
+    display_df["updated_at"] = pd.to_datetime(display_df["updated_at"], errors="coerce")
+    display_df["updated_at"] = display_df["updated_at"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
 st.dataframe(display_df, use_container_width=True)
