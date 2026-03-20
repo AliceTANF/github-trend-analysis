@@ -6,7 +6,7 @@ from datetime import datetime
 
 load_dotenv()
 
-// = os.getenv("GITHUB_TOKEN")
+
 TOKEN = os.getenv("GH_API_TOKEN") or os.getenv("GITHUB_TOKEN")
 
 headers = {
