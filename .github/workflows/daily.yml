@@ -37,11 +37,16 @@ jobs:
 
       - name: Commit and push data
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+          mkdir -p data/snapshots data/history
           git add data/snapshots data/history
 
-          git diff --cached --quiet || git commit -m "auto update data"
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
 
+          git commit -m "auto update data"
           git push
