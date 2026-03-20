@@ -1,0 +1,8 @@
+requests
+pandas
+python-dotenv
+matplotlib
+plotly
+streamlit
+schedule
+
